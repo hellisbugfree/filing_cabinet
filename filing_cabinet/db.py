@@ -2,6 +2,7 @@ import sqlite3
 import os
 import hashlib
 from datetime import datetime
+from typing import Optional
 
 class FilingCabinetDB:
     def __init__(self, db_path):
@@ -99,3 +100,34 @@ class FilingCabinetDB:
             return full_path
         else:
             return None
+
+    def get_file_count(self) -> int:
+        """Get the total number of files in the database."""
+        self.cursor.execute("SELECT COUNT(*) FROM file")
+        count = self.cursor.fetchone()[0]
+        return count
+
+    def get_incarnation_count(self) -> int:
+        """Get the total number of file incarnations in the database."""
+        self.cursor.execute("SELECT COUNT(*) FROM file_incarnation")
+        count = self.cursor.fetchone()[0]
+        return count
+
+    def get_config(self, key: str) -> Optional[str]:
+        """Get configuration value from database."""
+        self.cursor.execute("SELECT value FROM config WHERE key = ?", (key,))
+        row = self.cursor.fetchone()
+        return row[0] if row else None
+
+    def put_config(self, key: str, value: str) -> None:
+        """Set configuration value in database."""
+        self.cursor.execute(
+            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
+            (key, value)
+        )
+        self.conn.commit()
+
+    def config_exists(self, key: str) -> bool:
+        """Check if configuration key exists."""
+        self.cursor.execute("SELECT 1 FROM config WHERE key = ?", (key,))
+        return self.cursor.fetchone() is not None

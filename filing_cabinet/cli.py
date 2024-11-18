@@ -1,6 +1,9 @@
 import click
 import os
+import hashlib
+from datetime import datetime, timedelta
 from filing_cabinet.db import FilingCabinetDB
+from filing_cabinet.config import get_config, ConfigurationError
 
 DB_PATH = os.path.expanduser('~/filing.cabinet')
 
@@ -9,6 +12,109 @@ def cli():
     """Filing Cabinet - A command-line file management system."""
     pass
 
+@cli.group()
+def config():
+    """Configuration management commands."""
+    pass
+
+@config.command(name="get")
+@click.argument('key')
+@click.option('--default', help="Default value if key doesn't exist")
+def config_get(key, default):
+    """Get a configuration value."""
+    try:
+        value = get_config().get_config(key, default)
+        click.echo(f"{key}: {value}")
+    except ConfigurationError as e:
+        click.echo(str(e), err=True)
+        exit(1)
+
+@config.command(name="set")
+@click.argument('key')
+@click.argument('value')
+def config_set(key, value):
+    """Set a configuration value."""
+    try:
+        get_config().put_config(key, value)
+        click.echo(f"Set {key} to {value}")
+    except ConfigurationError as e:
+        click.echo(str(e), err=True)
+        exit(1)
+
+@config.command(name="create")
+@click.argument('key')
+@click.argument('value')
+@click.option('--default', help="Default value for the key")
+def config_create(key, value, default):
+    """Create a new configuration entry."""
+    try:
+        get_config().create_config(key, value, default or value)
+        click.echo(f"Created {key} with value {value}")
+    except ConfigurationError as e:
+        click.echo(str(e), err=True)
+        exit(1)
+
+@config.command(name="list")
+def config_list():
+    """List all configuration values."""
+    db = FilingCabinetDB(DB_PATH)
+    db.connect()
+    
+    db.cursor.execute("SELECT key, value FROM config ORDER BY key")
+    rows = db.cursor.fetchall()
+    
+    if not rows:
+        click.echo("No configuration entries found")
+        return
+        
+    # Group by prefix
+    groups = {}
+    for key, value in rows:
+        prefix = key.split('.')[0]
+        if prefix not in groups:
+            groups[prefix] = []
+        groups[prefix].append((key, value))
+    
+    # Print grouped configuration
+    for prefix in sorted(groups.keys()):
+        click.echo(f"\n[{prefix}]")
+        for key, value in sorted(groups[prefix]):
+            click.echo(f"{key}: {value}")
+    
+    db.close()
+
+@cli.command()
+def status():
+    """Show database status."""
+    db = FilingCabinetDB(DB_PATH)
+    db.connect()
+    db.create_tables()
+    
+    # Get database file path
+    db_path = os.path.abspath(DB_PATH)
+    
+    # Calculate database size
+    db_size = os.path.getsize(db_path)
+    
+    # Calculate database checksum
+    with open(db_path, 'rb') as f:
+        db_checksum = hashlib.sha256(f.read()).hexdigest()
+    
+    # Get record counts
+    file_count = db.get_file_count()
+    incarnation_count = db.get_incarnation_count()
+    
+    click.echo("Database Status:")
+    click.echo(f"Path: {db_path}")
+    click.echo(f"Name: {get_config().get_config('cabinet.name', 'Filing Cabinet')}")
+    click.echo(f"Version: {get_config().get_config('database.schema.version')}")
+    click.echo(f"Size: {db_size:,} bytes")
+    click.echo(f"Checksum: {db_checksum}")
+    click.echo(f"File Records: {file_count}")
+    click.echo(f"File Incarnation Records: {incarnation_count}")
+    
+    db.close()
+
 @cli.command()
 @click.argument('path', type=click.Path(exists=True), default=os.path.expanduser('~'))
 def index(path):
@@ -16,20 +122,50 @@ def index(path):
     db = FilingCabinetDB(DB_PATH)
     db.connect()
     db.create_tables()
-
+    
+    # Get configuration values
+    config = get_config()
+    allowed_extensions = config.get_config('file.index.extensions')
+    max_size = config.get_config('file.index.max_size')
+    days_range = config.get_config('file.index.date_range_days')
+    cutoff_date = datetime.now() - timedelta(days=days_range)
+    
     for root, _, files in os.walk(path):
         for file in files:
             file_path = os.path.join(root, file)
-            if os.path.isfile(file_path):
-                checksum = db.insert_file(file_path)
-                click.echo(f"Indexed: {file_path} (Checksum: {checksum})")
-
+            if not os.path.isfile(file_path):
+                continue
+                
+            # Check file extension
+            _, ext = os.path.splitext(file_path)
+            if allowed_extensions and ext.lower() not in allowed_extensions:
+                continue
+                
+            # Check file size
+            if max_size and os.path.getsize(file_path) > max_size:
+                continue
+                
+            # Check file date
+            mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
+            if mtime < cutoff_date:
+                continue
+            
+            checksum = db.insert_file(file_path)
+            click.echo(f"Indexed: {file_path} (Checksum: {checksum})")
+    
     db.close()
 
 @cli.command()
 @click.argument('file_path', type=click.Path(exists=True))
 def checkin(file_path):
     """Check in a file to the filing cabinet."""
+    config = get_config()
+    max_size = config.get_config('file.checkin.max_size')
+    
+    if os.path.getsize(file_path) > max_size:
+        click.echo(f"Error: File size exceeds maximum allowed size of {max_size:,} bytes", err=True)
+        exit(1)
+        
     db = FilingCabinetDB(DB_PATH)
     db.connect()
     db.create_tables()
