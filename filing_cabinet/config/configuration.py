@@ -1,53 +1,32 @@
-from typing import Any, Optional, Dict
-import sqlite3
-from pathlib import Path
+"""Configuration management for Filing Cabinet."""
 import json
+import sqlite3
+from typing import Any, Dict, Optional
 
 class ConfigurationError(Exception):
-    """Base exception for configuration related errors."""
+    """Configuration-related errors."""
     pass
 
 class Configuration:
-    """Manages application configuration settings."""
+    """Configuration management class."""
     
-    # Default configuration values
-    DEFAULT_CONFIG = {
-        'cabinet.name': 'Filing Cabinet',
-        'database.schema.version': '1.0.0',
-        'file.index.extensions': ['.txt', '.pdf', '.doc', '.docx'],
-        'file.checkin.max_size': 100 * 1024 * 1024,  # 100MB
-        'storage.compression': 'none',
-        'storage.encryption': 'none',
-        'indexing.recursive': True,
-        'indexing.follow_symlinks': False,
-        'indexing.ignore_patterns': ['.git/*', '*.pyc', '__pycache__/*']
-    }
-
     def __init__(self, db_path: str):
         """Initialize configuration with database path."""
         self.db_path = db_path
         self.conn = None
         self.cursor = None
-        self._ensure_config_table()
-
+        self._create_tables()
+    
     def _connect(self) -> None:
-        """Establish database connection."""
-        if not self.conn:
+        """Connect to the database."""
+        if self.conn is None:
             self.conn = sqlite3.connect(self.db_path)
             self.cursor = self.conn.cursor()
-
-    def _close(self) -> None:
-        """Close database connection."""
-        if self.conn:
-            self.conn.close()
-            self.conn = None
-            self.cursor = None
-
-    def _ensure_config_table(self) -> None:
-        """Ensure configuration table exists and has default values."""
+    
+    def _create_tables(self) -> None:
+        """Create configuration tables."""
         try:
             self._connect()
-            # Create config table if it doesn't exist
             self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS config (
                 key TEXT PRIMARY KEY,
@@ -57,16 +36,9 @@ class Configuration:
             )
             ''')
             self.conn.commit()
-
-            # Initialize default configuration
-            for key, value in self.DEFAULT_CONFIG.items():
-                self.create_config(key, value, value)
-
         except sqlite3.Error as e:
-            raise ConfigurationError(f"Database error: {str(e)}")
-        finally:
-            self._close()
-
+            raise ConfigurationError(f"Failed to create tables: {str(e)}")
+    
     def get_config(self, key: str, default: Any = None) -> Any:
         """
         Get configuration value for the given key.
@@ -96,39 +68,32 @@ class Configuration:
                 
         except sqlite3.Error as e:
             raise ConfigurationError(f"Database error: {str(e)}")
-        finally:
-            self._close()
-
+    
     def put_config(self, key: str, value: Any) -> None:
         """
-        Update configuration value for the given key.
+        Set configuration value.
         
         Args:
             key: Configuration key
-            value: New value
+            value: Value to set
         """
         try:
             self._connect()
-            # Check if key exists
-            self.cursor.execute('SELECT 1 FROM config WHERE key = ?', (key,))
-            if not self.cursor.fetchone():
-                raise ConfigurationError(f"Configuration key '{key}' not found")
-            
             # Convert value to JSON string if it's not a string
             if not isinstance(value, str):
                 value = json.dumps(value)
-            
-            self.cursor.execute(
-                'UPDATE config SET value = ? WHERE key = ?',
-                (value, key)
-            )
+                
+            self.cursor.execute('''
+            UPDATE config SET value = ? WHERE key = ?
+            ''', (value, key))
             self.conn.commit()
             
+            if self.cursor.rowcount == 0:
+                raise ConfigurationError(f"Configuration key '{key}' not found")
+                
         except sqlite3.Error as e:
             raise ConfigurationError(f"Database error: {str(e)}")
-        finally:
-            self._close()
-
+    
     def create_config(self, key: str, value: Any, default: Any = None, description: str = '') -> None:
         """
         Create a new configuration entry.
@@ -146,44 +111,45 @@ class Configuration:
                 value = json.dumps(value)
             if default is not None and not isinstance(default, str):
                 default = json.dumps(default)
-            
+                
             self.cursor.execute('''
-            INSERT OR IGNORE INTO config (key, value, default_value, description)
+            INSERT INTO config (key, value, default_value, description)
             VALUES (?, ?, ?, ?)
             ''', (key, value, default, description))
             self.conn.commit()
             
+        except sqlite3.IntegrityError:
+            raise ConfigurationError(f"Configuration key '{key}' already exists")
         except sqlite3.Error as e:
             raise ConfigurationError(f"Database error: {str(e)}")
-        finally:
-            self._close()
-
+    
     def reset_config(self, key: str) -> None:
         """
-        Reset configuration value to its default.
+        Reset configuration to default value.
         
         Args:
             key: Configuration key
         """
         try:
             self._connect()
-            self.cursor.execute(
-                'UPDATE config SET value = default_value WHERE key = ?',
-                (key,)
-            )
+            self.cursor.execute('''
+            UPDATE config SET value = default_value
+            WHERE key = ? AND default_value IS NOT NULL
+            ''', (key,))
             self.conn.commit()
             
+            if self.cursor.rowcount == 0:
+                raise ConfigurationError(f"Configuration key '{key}' not found or has no default value")
+                
         except sqlite3.Error as e:
             raise ConfigurationError(f"Database error: {str(e)}")
-        finally:
-            self._close()
-
+    
     def list_config(self) -> Dict[str, Dict[str, Any]]:
         """
         List all configuration entries.
         
         Returns:
-            Dictionary of configuration entries with their values and metadata
+            Dictionary of configuration entries
         """
         try:
             self._connect()
@@ -193,64 +159,61 @@ class Configuration:
             config_dict = {}
             for key, value, default, description in rows:
                 try:
-                    parsed_value = json.loads(value)
+                    config_dict[key] = {
+                        'value': json.loads(value),
+                        'default': json.loads(default) if default else None,
+                        'description': description
+                    }
                 except json.JSONDecodeError:
-                    parsed_value = value
-                    
-                try:
-                    parsed_default = json.loads(default) if default else None
-                except json.JSONDecodeError:
-                    parsed_default = default
-                
-                config_dict[key] = {
-                    'value': parsed_value,
-                    'default': parsed_default,
-                    'description': description
-                }
-                
+                    config_dict[key] = {
+                        'value': value,
+                        'default': default,
+                        'description': description
+                    }
+            
             return config_dict
             
         except sqlite3.Error as e:
             raise ConfigurationError(f"Database error: {str(e)}")
-        finally:
-            self._close()
-
+    
     def export_config(self, file_path: str) -> None:
         """
-        Export configuration to a JSON file.
+        Export configuration to a file.
         
         Args:
-            file_path: Path to export the configuration
+            file_path: Path to export file
         """
-        config_dict = self.list_config()
-        
         try:
+            config = self.list_config()
             with open(file_path, 'w') as f:
-                json.dump(config_dict, f, indent=4)
-        except IOError as e:
+                json.dump(config, f, indent=4)
+        except Exception as e:
             raise ConfigurationError(f"Failed to export configuration: {str(e)}")
-
+    
     def import_config(self, file_path: str) -> None:
         """
-        Import configuration from a JSON file.
+        Import configuration from a file.
         
         Args:
-            file_path: Path to import the configuration from
+            file_path: Path to import file
         """
         try:
             with open(file_path, 'r') as f:
-                config_dict = json.load(f)
-            
-            for key, data in config_dict.items():
-                if 'value' in data:
-                    self.create_config(
-                        key,
-                        data['value'],
-                        data.get('default'),
-                        data.get('description', '')
-                    )
-                    
-        except IOError as e:
+                config = json.load(f)
+                
+            for key, entry in config.items():
+                self.create_config(
+                    key,
+                    entry['value'],
+                    entry.get('default'),
+                    entry.get('description', '')
+                )
+        except Exception as e:
             raise ConfigurationError(f"Failed to import configuration: {str(e)}")
-        except json.JSONDecodeError as e:
-            raise ConfigurationError(f"Invalid configuration file: {str(e)}")
+    
+    def close(self) -> None:
+        """Close database connection."""
+        if self.conn:
+            self.conn.close()
+            self.conn = None
+            self.cursor = None

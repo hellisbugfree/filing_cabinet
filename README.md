@@ -113,14 +113,21 @@ Default configuration values:
 - ✅ Improved error handling and type safety
 - ✅ Enhanced database schema management
 - ✅ deployment script to git for deployment
-
-
-## Testing Backlog/Errors
-
-1. ✅ Fixed: Duplicate incarnation handling during indexing
+- ✅ Fixed: Duplicate incarnation handling during indexing
    - Issue: SQLite unique constraint error when indexing same directory multiple times
    - Fix: Added update logic for existing incarnations instead of insert-only
 
+
+## Recent Changes
+- Added comprehensive logging system
+- Created initial test suite for FileService and ConfigService
+- Added development tools and testing dependencies
+- Improved error handling across services
+
+## Testing Backlog/Errors
+1. make logging persistent in the database with 
+- database.log.maximum_entries = default: 10000
+- database.log.retention.storage_path = default: /var/log/filing_cabinet
 2. Known Issues:
    - [ ] Need to handle symlinks properly during indexing
    - [ ] Add proper error handling for file permission issues
