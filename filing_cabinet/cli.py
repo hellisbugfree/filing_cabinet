@@ -2,11 +2,21 @@ import click
 import os
 import hashlib
 from datetime import datetime, timedelta
-from filing_cabinet.db import FilingCabinetDB
-from filing_cabinet.config import get_config, ConfigurationError
+from .services.file_service import FileService
+from .config import initialize_config, get_config, ConfigurationError, ConfigService
 
 DB_PATH = os.path.expanduser('~/filing.cabinet')
 
+def init_services():
+    """Initialize services."""
+    # Create an instance of ConfigService with the DB path
+    config_service = ConfigService(DB_PATH)
+    
+    # Initialize the service
+    if not config_service.is_initialized:
+        config_service.initialize(DB_PATH)
+    
+    return FileService(DB_PATH)
 
 @click.group()
 def cli():
@@ -16,6 +26,7 @@ def cli():
 @cli.group()
 def config():
     """Configuration management commands."""
+    init_services()  # Initialize services for config commands
     pass
 
 @config.command(name="get")
@@ -24,7 +35,7 @@ def config():
 def config_get(key, default):
     """Get a configuration value."""
     try:
-        value = get_config().get_config(key, default)
+        value = get_config().get(key, default)
         click.echo(f"{key}: {value}")
     except ConfigurationError as e:
         click.echo(str(e), err=True)
@@ -36,7 +47,7 @@ def config_get(key, default):
 def config_set(key, value):
     """Set a configuration value."""
     try:
-        get_config().put_config(key, value)
+        get_config().set(key, value)
         click.echo(f"Set {key} to {value}")
     except ConfigurationError as e:
         click.echo(str(e), err=True)
@@ -46,10 +57,11 @@ def config_set(key, value):
 @click.argument('key')
 @click.argument('value')
 @click.option('--default', help="Default value for the key")
-def config_create(key, value, default):
+@click.option('--description', help="Description of the configuration")
+def config_create(key, value, default, description):
     """Create a new configuration entry."""
     try:
-        get_config().create_config(key, value, default or value)
+        get_config().create(key, value, default, description or '')
         click.echo(f"Created {key} with value {value}")
     except ConfigurationError as e:
         click.echo(str(e), err=True)
@@ -58,181 +70,146 @@ def config_create(key, value, default):
 @config.command(name="list")
 def config_list():
     """List all configuration values."""
-    db = FilingCabinetDB(DB_PATH)
-    db.connect()
-    
-    db.cursor.execute("SELECT key, value FROM config ORDER BY key")
-    rows = db.cursor.fetchall()
-    
-    if not rows:
-        click.echo("No configuration entries found")
-        return
+    try:
+        config_dict = get_config().list_all()
         
-    # Group by prefix
-    groups = {}
-    for key, value in rows:
-        prefix = key.split('.')[0]
-        if prefix not in groups:
-            groups[prefix] = []
-        groups[prefix].append((key, value))
-    
-    # Print grouped configuration
-    for prefix in sorted(groups.keys()):
-        click.echo(f"\n[{prefix}]")
-        for key, value in sorted(groups[prefix]):
-            click.echo(f"{key}: {value}")
-    
-    db.close()
+        # Group by prefix
+        groups = {}
+        for key, data in config_dict.items():
+            prefix = key.split('.')[0]
+            if prefix not in groups:
+                groups[prefix] = []
+            groups[prefix].append((key, data))
+        
+        # Print grouped configuration
+        for prefix in sorted(groups.keys()):
+            click.echo(f"\n[{prefix}]")
+            for key, data in sorted(groups[prefix]):
+                value = data['value']
+                default = data['default']
+                description = data['description']
+                
+                click.echo(f"{key}: {value}")
+                if description:
+                    click.echo(f"  Description: {description}")
+                if value != default:
+                    click.echo(f"  Default: {default}")
+    except ConfigurationError as e:
+        click.echo(str(e), err=True)
+        exit(1)
+
+@config.command(name="reset")
+@click.argument('key')
+def config_reset(key):
+    """Reset configuration value to default."""
+    try:
+        get_config().reset(key)
+        click.echo(f"Reset {key} to default value")
+    except ConfigurationError as e:
+        click.echo(str(e), err=True)
+        exit(1)
+
+@config.command(name="export")
+@click.argument('file_path')
+def config_export(file_path):
+    """Export configuration to a file."""
+    try:
+        get_config().export_to_file(file_path)
+        click.echo(f"Configuration exported to {file_path}")
+    except ConfigurationError as e:
+        click.echo(str(e), err=True)
+        exit(1)
+
+@config.command(name="import")
+@click.argument('file_path')
+def config_import(file_path):
+    """Import configuration from a file."""
+    try:
+        get_config().import_from_file(file_path)
+        click.echo(f"Configuration imported from {file_path}")
+    except ConfigurationError as e:
+        click.echo(str(e), err=True)
+        exit(1)
 
 @cli.command()
 def status():
     """Show database status."""
-    db = FilingCabinetDB(DB_PATH)
-    db.connect()
-    db.create_tables()
+    service = init_services()
+    stats = service.get_statistics()
     
-    # Get database file path
-    db_path = os.path.abspath(DB_PATH)
-    
-    # Calculate database size
-    db_size = os.path.getsize(db_path)
-    
-    # Calculate database checksum
-    with open(db_path, 'rb') as f:
-        db_checksum = hashlib.sha256(f.read()).hexdigest()
-    
-    # Get record counts
-    file_count = db.get_file_count()
-    incarnation_count = db.get_incarnation_count()
-    
-    click.echo("Database Status:")
-    click.echo(f"Path: {db_path}")
-    click.echo(f"Name: {get_config().get_config('cabinet.name', 'Filing Cabinet')}")
-    click.echo(f"Version: {get_config().get_config('database.schema.version')}")
-    click.echo(f"Size: {db_size:,} bytes")
-    click.echo(f"Checksum: {db_checksum}")
-    click.echo(f"File Records: {file_count}")
-    click.echo(f"File Incarnation Records: {incarnation_count}")
-    
-    db.close()
+    click.echo("Filing Cabinet Status:")
+    click.echo(f"Name: {stats['name']}")
+    click.echo(f"Version: {stats['version']}")
+    click.echo(f"Total Files: {stats['total_files']}")
+    click.echo(f"Total Incarnations: {stats['total_incarnations']}")
 
 @cli.command()
 @click.argument('path', type=click.Path(exists=True), default=os.path.expanduser('~'))
 def index(path):
     """Index files in the given path."""
-    db = FilingCabinetDB(DB_PATH)
-    db.connect()
-    db.create_tables()
+    service = init_services()
+    new_paths = service.index_files(path)
     
-    # Get configuration values - only care about extensions
-    config = get_config()
-    allowed_extensions = config.get_config('file.index.extensions')
-    
-    for root, _, files in os.walk(path):
-        for file in files:
-            file_path = os.path.join(root, file)
-            if not os.path.isfile(file_path) and not os.path.islink(file_path):
-                continue
-                
-            # Check file extension
-            _, ext = os.path.splitext(file_path)
-            if allowed_extensions and ext.lower() not in allowed_extensions:
-                continue
-            
-            # Calculate checksum without inserting into file table
-            checksum = db.get_file_checksum(file_path)
-            
-            # Add incarnation record
-            abs_path = db.insert_file_incarnation(file_path, checksum)
-            
-            # Show different message based on whether file is in database
-            if db.file_exists(checksum):
-                click.echo(f"Found incarnation: {abs_path} (Checksum: {checksum})")
-            else:
-                click.echo(f"New file found: {abs_path} (Checksum: {checksum}). Use 'filing checkin' to add it to the cabinet.")
-    
-    db.close()
+    if not new_paths:
+        click.echo("No new file locations found.")
+    else:
+        for file_path in new_paths:
+            click.echo(f"Added new location: {file_path}")
+        click.echo(f"\nAdded {len(new_paths)} new file location(s) to index.")
 
 @cli.command()
 @click.argument('file_path', type=click.Path(exists=True))
 def checkin(file_path):
     """Check in a file to the filing cabinet."""
-    config = get_config()
-    max_size = config.get_config('file.checkin.max_size')
-    
-    if os.path.getsize(file_path) > max_size:
-        click.echo(f"Error: File size exceeds maximum allowed size of {max_size:,} bytes", err=True)
+    service = init_services()
+    try:
+        checksum = service.checkin_file(file_path)
+        click.echo(f"File checked in: {file_path} (Checksum: {checksum})")
+    except ValueError as e:
+        click.echo(f"Error: {str(e)}", err=True)
         exit(1)
-        
-    db = FilingCabinetDB(DB_PATH)
-    db.connect()
-    db.create_tables()
-
-    checksum = db.insert_file(file_path)
-    click.echo(f"File checked in: {file_path} (Checksum: {checksum})")
-
-    db.close()
 
 @cli.command()
 @click.argument('path', type=click.Path(exists=True))
 def file_info(path):
     """Show detailed information about a file and all its incarnations."""
-    db = FilingCabinetDB(DB_PATH)
-    db.connect()
+    service = init_services()
+    file, incarnations = service.get_file_info(path)
     
-    # First get file info
-    result = db.get_file_info(path)
-    if not result or not result[0]:
+    if not file:
         click.echo(f"File not found in database: {path}")
-        db.close()
         return
-    
-    file_info, incarnations = result
-    checksum = file_info[0]  # First element is checksum
     
     click.echo(f"\nFile Information:")
-    click.echo(f"Checksum: {checksum}")
-    click.echo(f"URL: {file_info[1]}")
-    click.echo(f"Filed: {file_info[2]}")
-    click.echo(f"Last Updated: {file_info[3]}")
-    click.echo(f"Name: {file_info[4]}")
-    click.echo(f"Size: {file_info[5]} bytes")
+    click.echo(f"Checksum: {file.checksum}")
+    click.echo(f"Name: {file.name}")
+    click.echo(f"Size: {file.size:,} bytes")
+    click.echo(f"Filed: {file.filed_timestamp}")
+    click.echo(f"Last Updated: {file.last_update_timestamp}")
     
-    # Get all incarnations
-    if not incarnations:
-        click.echo("\nNo incarnations found.")
-        db.close()
-        return
-    
-    click.echo("\nIncarnations:")
-    for inc in incarnations:
-        click.echo("\n  Location:")
-        click.echo(f"    Path: {inc[0]}")  # incarnation_url
-        click.echo(f"    Device: {inc[1]}")  # incarnation_device
-        click.echo("  Details:")
-        click.echo(f"    Type: {inc[3]}")  # incarnation_type
-        if inc[4]:  # forward_url for symlinks
-            click.echo(f"    Forward URL: {inc[4]}")
-        click.echo(f"    Last Updated: {inc[5]}")  # last_update_time_stamp
-    
-    db.close()
+    if incarnations:
+        click.echo("\nIncarnations:")
+        for inc in incarnations:
+            click.echo(f"\n  Path: {inc.incarnation_url}")
+            click.echo(f"  Device: {inc.incarnation_device}")
+            click.echo(f"  Type: {inc.incarnation_type}")
+            if inc.forward_url:
+                click.echo(f"  Forward URL: {inc.forward_url}")
+            click.echo(f"  Last Updated: {inc.last_update_timestamp}")
 
 @cli.command()
 @click.argument('checksum')
-@click.argument('output_path', type=click.Path(exists=True))
+@click.argument('output_path', type=click.Path())
 def checkout(checksum, output_path):
     """Check out a file from the filing cabinet."""
-    db = FilingCabinetDB(DB_PATH)
-    db.connect()
-
-    file_path = db.checkout_file(checksum, output_path)
-
-    if file_path:
-        click.echo(f"File checked out: {file_path}")
+    service = init_services()
+    result = service.checkout_file(checksum, output_path)
+    
+    if result:
+        click.echo(f"File checked out to: {result}")
     else:
-        click.echo("File not found in the filing cabinet.")
-
-    db.close()
+        click.echo(f"File not found with checksum: {checksum}", err=True)
+        exit(1)
 
 if __name__ == '__main__':
     cli()

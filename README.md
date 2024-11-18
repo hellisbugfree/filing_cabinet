@@ -1,173 +1,143 @@
 # Filing Cabinet
 
-A command-line file management system that allows indexing, checking in, and checking out files.
+A command-line file management system for organizing and tracking files across your system.
 
-it also supports post check-in processing such as OCR and metadata extraction, and pre check-out processing such as permission (?) and encryption (?).
+## Features
 
-the Idea is the database serves as a local repository of in some way or another important files to the user - may that be statement files, legal documents, invoices, or other work files which I want to store. this local repository can be copied (SQLite single file) to a remote location for backup or indeed for incorporation into a larger repository.
+- File check-in and check-out with checksum verification
+- Track multiple incarnations (copies) of the same file
+- Automatic file indexing with configurable extensions
+- Flexible configuration management with import/export capabilities
+- SQLite-based storage for file metadata and configuration
 
-it allows for files to be auto or manually tagged with metadata such as date, source, author, Company, document type, etc.
+## Project Structure
 
-based on the tags it may allow for automate keeping certain files in sync with multiple external folders/repositories. think tax advisor where I need to share documents of a given date range with specific tags, like #invoice #tax_advisor etc. 
+```
+filing_cabinet/
+├── models/           # Domain models
+│   ├── file.py      # File entity and operations
+│   └── incarnation.py # File incarnation tracking
+├── repositories/     # Data access layer
+│   ├── base.py      # Generic repository interface
+│   ├── file_repository.py
+│   └── incarnation_repository.py
+├── services/        # Business logic layer
+│   └── file_service.py
+├── config/         # Configuration management
+│   ├── configuration.py
+│   └── config_service.py
+└── cli.py         # Command-line interface
+```
 
 ## Installation
 
-1. Clone this repository
-2. Create a virtual environment: `python3 -m venv venv`
-3. Activate the virtual environment: `source venv/bin/activate`
-4. Install dependencies: `pip install -r requirements.txt`
-5. Install the package: `pip install -e .`
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/filing_cabinet.git
+cd filing_cabinet
+
+# Create and activate virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install the package
+pip install -e .
+```
 
 ## Usage
 
-After installation, the following commands are available:
+### Basic Commands
 
-### File Management
-- Index files: `filing index [PATH]`
-- Check in a file: `filing checkin FILE_PATH`
-- Get file info: `filing info FILE_PATH`
-- Check out a file: `filing checkout CHECKSUM OUTPUT_PATH`
+```bash
+# Show filing cabinet status
+filing status
+
+# Index files in a directory
+filing index [PATH]
+
+# Check in a file
+filing checkin FILE_PATH
+
+# Get file information
+filing file-info FILE_PATH
+
+# Check out a file
+filing checkout CHECKSUM OUTPUT_PATH
+```
 
 ### Configuration Management
-- List all settings: `filing config list`
-- Get a setting: `filing config get KEY`
-- Set a setting: `filing config set KEY VALUE`
-- Create user setting: `filing config create user.KEY VALUE`
 
-### Database Management
-- Show database status: `filing status`
+```bash
+# List all configuration
+filing config list
 
-For more information, use `filing --help` or `filing COMMAND --help`
+# Get a configuration value
+filing config get KEY
 
-## Development Status
+# Set a configuration value
+filing config set KEY VALUE
 
-### V 0.0.1
-- ✅ Basic file operations working
-  - Check-in
-  - Check-out
-  - File info
-- ⚠️ Index command needs refactoring (too broad in scope)
+# Export configuration
+filing config export CONFIG_FILE
 
-### V 0.1.1 
-- ✅ Database status command
-  - Shows DB path, name, version
-  - Shows file and incarnation counts
-  - Shows DB size and checksum
-- ✅ Configuration management system
-  - Database-backed configuration storage
-  - Hierarchical naming convention (cabinet.*, database.*, file.*, user.*)
-  - Default values for core settings
-- ✅ File operation safety measures
-  - Size limits for check-in
-  - File type restrictions for indexing
-  - Date range filtering for indexing
+# Import configuration
+filing config import CONFIG_FILE
 
-### Backlog
+# Reset configuration to default
+filing config reset KEY
+```
 
-#### V 0.1.2 (Current)
-- 🔄 Index command refactoring
-  - Use file_incarnation table for tracking
+## Configuration Options
 
-#### V 0.1.3 (Planned)
-- checkin 
-  - the url is wrong only the short name - get the full name and device identifier like in the insert_file_incarnation
-- refactor code to be more modular
-- Database improvements
-  - encapsulate schema management and versioning
-- OCR processing and metadata extraction
+Default configuration values:
 
+```python
+{
+    'cabinet.name': 'Filing Cabinet',
+    'database.schema.version': '1.0.0',
+    'file.index.extensions': ['.txt', '.pdf', '.doc', '.docx'],
+    'file.checkin.max_size': 100 * 1024 * 1024,  # 100MB
+    'storage.compression': 'none',
+    'storage.encryption': 'none',
+    'indexing.recursive': True,
+    'indexing.follow_symlinks': False,
+    'indexing.ignore_patterns': ['.git/*', '*.pyc', '__pycache__/*']
+}
+```
 
+## Recent Improvements
 
-#### Future Versions
-index
-  - Implement symlink detection and handling 
+- ✅ Complete codebase refactoring for better modularity
+- ✅ Implemented proper domain models and repositories
+- ✅ Added comprehensive configuration management system
+- ✅ Improved error handling and type safety
+- ✅ Enhanced database schema management
 
+## Testing Backlog/Errors
 
-- 🔄 CLI improvements 
-  - Add color output
-  - Add logging
-  - Add progress bars
-  - Add error handling
-  - Add help text  
+1. ✅ Fixed: Duplicate incarnation handling during indexing
+   - Issue: SQLite unique constraint error when indexing same directory multiple times
+   - Fix: Added update logic for existing incarnations instead of insert-only
 
-- 🔄 File processing enhancements
-  - Implement batch file processing limits
-  - Add file type detection
-  - Add basic metadata extraction
+2. Known Issues:
+   - [ ] Need to handle symlinks properly during indexing
+   - [ ] Add proper error handling for file permission issues
+   - [ ] Add validation for configuration values
+   - [ ] Improve error messages for database connection issues
 
-- introduce some prober database schema versioning and handl
-- 📋 Google Sheets Integration
-  - Export database contents to sheets
-  - Import metadata from sheets
-  - Real-time sync option
-- 📋 Enhanced Metadata
-  - OCR for PDFs and images
-  - Automatic tag suggestions
-  - Custom metadata fields
-- 📋 External Storage
-  - Cloud backup integration
-  - Remote repository sync
-  - Multi-device support
-- 📋 UI/Visualization
-  - Web interface for management
-  - File relationship visualization
-  - Tag cloud and statistics 
-- 🔄 Configuration system improvements
-  - Restrict config creation to valid prefixes only
-  - Add config validation rules
-  - Add config documentation command
+## Planned Features
 
+- [ ] Compression and encryption support
+- [ ] Advanced OCR processing and metadata extraction
+- [ ] File version control
+- [ ] Enhanced symlink detection and handling
+- [ ] Comprehensive test suite
+- [ ] Performance optimization for large file indexing
 
-### Quick Start for Development
+## Contributing
 
-1. Make your changes
-2. Run `./scripts/commit.sh "Your commit message"` to commit and push changes
-3. Run `./scripts/tag_version.sh X.Y.Z` to create a new version tag
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-### File Structure
+## License
 
-- `filing_cabinet/` - Main package directory
-  - [cli.py](cci:7://file:///Users/antonhell/Applications/filing_cabinet/filing_cabinet/cli.py:0:0-0:0) - Command-line interface and command implementations
-  - `db.py` - Database operations and schema management
-  - `config.py` - Configuration management system
-- `scripts/` - Utility scripts for development
-- `setup.py` - Package configuration
-  - cabinet.path
-  - cabinet.name - default is "filing Cabinet " + path 
-  - cabinet.database.version - internal versioning for schema changes
-  - file.checkin.max_size - for blob fields - default 5MB
-  - file.checkin.max_files_at_once.warning - default 10
-  - ...
-- introduce get_config and put_config methods
-  - get_config(key, default=None) - returns config value or default if not found
-  - put_config(key, value) - sets config value
-- make sure all commands deploy parameter safty measures i.e. 
-    - checkin/out of more than filing.file.checkin.max_size, filing.file.checkin.max_files_at_once, ... 
-    - index
-
-what do I need for DB management? 
-- at least a status command listing 
-    - DB path
-    - DB name
-    - number file records
-    - number file incarnations records
-    - DB version
-    - DB size
-    - DB checksum
-- a way to connect to google sheets? 
-    - alternative solution to visually view/manage the db
-
-
-### Quick Start
-
-1. Make your changes
-2. Run `./scripts/commit.sh "Your commit message"` to commit and push changes
-3. Run `./scripts/tag_version.sh X.Y.Z` to create a new version tag
-
-### File Structure
-
-- `filing_cabinet/` - Main package directory
-  - `cli.py` - Command-line interface
-  - `db.py` - Database operations
-- `scripts/` - Utility scripts for development
-- `setup.py` - Package configuration
+This project is licensed under the MIT License - see the LICENSE file for details.
