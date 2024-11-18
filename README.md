@@ -10,8 +10,6 @@ it allows for files to be auto or manually tagged with metadata such as date, so
 
 based on the tags it may allow for automate keeping certain files in sync with multiple external folders/repositories. think tax advisor where I need to share documents of a given date range with specific tags, like #invoice #tax_advisor etc. 
 
-
-
 ## Installation
 
 1. Clone this repository
@@ -24,28 +22,116 @@ based on the tags it may allow for automate keeping certain files in sync with m
 
 After installation, the following commands are available:
 
+### File Management
 - Index files: `filing index [PATH]`
 - Check in a file: `filing checkin FILE_PATH`
 - Get file info: `filing info FILE_PATH`
 - Check out a file: `filing checkout CHECKSUM OUTPUT_PATH`
 
+### Configuration Management
+- List all settings: `filing config list`
+- Get a setting: `filing config get KEY`
+- Set a setting: `filing config set KEY VALUE`
+- Create user setting: `filing config create user.KEY VALUE`
+
+### Database Management
+- Show database status: `filing status`
+
 For more information, use `filing --help` or `filing COMMAND --help`
 
-## Development
-V 0.0.1
-- checkin, checkout, info works as expected
-- index
-  - far to encompasing in the moment - needs to be refactored
+## Development Status
 
-V 0.1.0
-- refactor index - idea is to quickly determine which file has incarnations on the device, and which kind of incarnation i.e. file or symlin
-  - do not checkin files - use the file_incarnation table to build the file_incarnation table
-  - only index files of a certain type 
-    - for the moment no default, an extension or list of extensions must be passed
-    - default is pdf and images (png, jpg, jpeg)
-  - only index files of a certain size - default is 5MB
-  - only index files of a certain date range - default is today and today - 30 days
-- introduce config file
+### V 0.0.1
+- ✅ Basic file operations working
+  - Check-in
+  - Check-out
+  - File info
+- ⚠️ Index command needs refactoring (too broad in scope)
+
+### V 0.1.1 
+- ✅ Database status command
+  - Shows DB path, name, version
+  - Shows file and incarnation counts
+  - Shows DB size and checksum
+- ✅ Configuration management system
+  - Database-backed configuration storage
+  - Hierarchical naming convention (cabinet.*, database.*, file.*, user.*)
+  - Default values for core settings
+- ✅ File operation safety measures
+  - Size limits for check-in
+  - File type restrictions for indexing
+  - Date range filtering for indexing
+
+### Backlog
+
+#### V 0.1.2 (Current)
+- 🔄 Index command refactoring
+  - Use file_incarnation table for tracking
+
+#### V 0.1.3 (Planned)
+- checkin 
+  - the url is wrong only the short name - get the full name and device identifier like in the insert_file_incarnation
+- refactor code to be more modular
+- Database improvements
+  - encapsulate schema management and versioning
+- OCR processing and metadata extraction
+
+
+
+#### Future Versions
+index
+  - Implement symlink detection and handling 
+
+
+- 🔄 CLI improvements 
+  - Add color output
+  - Add logging
+  - Add progress bars
+  - Add error handling
+  - Add help text  
+
+- 🔄 File processing enhancements
+  - Implement batch file processing limits
+  - Add file type detection
+  - Add basic metadata extraction
+
+- introduce some prober database schema versioning and handl
+- 📋 Google Sheets Integration
+  - Export database contents to sheets
+  - Import metadata from sheets
+  - Real-time sync option
+- 📋 Enhanced Metadata
+  - OCR for PDFs and images
+  - Automatic tag suggestions
+  - Custom metadata fields
+- 📋 External Storage
+  - Cloud backup integration
+  - Remote repository sync
+  - Multi-device support
+- 📋 UI/Visualization
+  - Web interface for management
+  - File relationship visualization
+  - Tag cloud and statistics 
+- 🔄 Configuration system improvements
+  - Restrict config creation to valid prefixes only
+  - Add config validation rules
+  - Add config documentation command
+
+
+### Quick Start for Development
+
+1. Make your changes
+2. Run `./scripts/commit.sh "Your commit message"` to commit and push changes
+3. Run `./scripts/tag_version.sh X.Y.Z` to create a new version tag
+
+### File Structure
+
+- `filing_cabinet/` - Main package directory
+  - [cli.py](cci:7://file:///Users/antonhell/Applications/filing_cabinet/filing_cabinet/cli.py:0:0-0:0) - Command-line interface and command implementations
+  - `db.py` - Database operations and schema management
+  - `config.py` - Configuration management system
+- `scripts/` - Utility scripts for development
+- `setup.py` - Package configuration
   - cabinet.path
   - cabinet.name - default is "filing Cabinet " + path 
   - cabinet.database.version - internal versioning for schema changes

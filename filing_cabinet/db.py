@@ -3,6 +3,7 @@ import os
 import hashlib
 from datetime import datetime
 from typing import Optional
+from .utils import get_device_identifier, get_file_type, get_absolute_path
 
 class FilingCabinetDB:
     def __init__(self, db_path):
@@ -19,6 +20,7 @@ class FilingCabinetDB:
             self.conn.close()
 
     def create_tables(self):
+        """Create the database tables."""
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS config (
             key TEXT PRIMARY KEY,
@@ -40,14 +42,12 @@ class FilingCabinetDB:
 
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS file_incarnation (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            incarnation_url TEXT UNIQUE,
+            incarnation_device TEXT,
             file_checksum TEXT,
-            incarnation_url TEXT,
             incarnation_type TEXT,
             forward_url TEXT,
-            status TEXT,
-            status_last_checked_time_stamp DATETIME,
-            FOREIGN KEY (file_checksum) REFERENCES file (checksum)
+            last_update_time_stamp DATETIME
         )
         ''')
 
@@ -131,3 +131,40 @@ class FilingCabinetDB:
         """Check if configuration key exists."""
         self.cursor.execute("SELECT 1 FROM config WHERE key = ?", (key,))
         return self.cursor.fetchone() is not None
+
+    def insert_file_incarnation(self, file_path, checksum):
+        """Insert a new file incarnation record."""
+        abs_path = get_absolute_path(file_path)
+        device_id = get_device_identifier()
+        file_type, forward_url = get_file_type(file_path)
+        
+        self.cursor.execute('''
+            INSERT OR REPLACE INTO file_incarnation 
+            (incarnation_url, incarnation_device, file_checksum, incarnation_type, forward_url, last_update_time_stamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (abs_path, device_id, checksum, file_type, forward_url, datetime.now()))
+        self.conn.commit()
+        return abs_path
+
+    def get_file_incarnations(self, file_path=None, checksum=None):
+        """Get all incarnations of a file, either by path or checksum."""
+        query = '''
+            SELECT 
+                incarnation_url,
+                incarnation_device,
+                file_checksum,
+                incarnation_type,
+                forward_url,
+                last_update_time_stamp
+            FROM file_incarnation
+        '''
+        params = []
+        if file_path:
+            query += ' WHERE incarnation_url = ?'
+            params.append(get_absolute_path(file_path))
+        elif checksum:
+            query += ' WHERE file_checksum = ?'
+            params.append(checksum)
+            
+        self.cursor.execute(query, params)
+        return self.cursor.fetchall()

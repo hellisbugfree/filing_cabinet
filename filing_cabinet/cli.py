@@ -7,6 +7,7 @@ from filing_cabinet.config import get_config, ConfigurationError
 
 DB_PATH = os.path.expanduser('~/filing.cabinet')
 
+
 @click.group()
 def cli():
     """Filing Cabinet - A command-line file management system."""
@@ -123,35 +124,32 @@ def index(path):
     db.connect()
     db.create_tables()
     
-    # Get configuration values
+    # Get configuration values - only care about extensions
     config = get_config()
     allowed_extensions = config.get_config('file.index.extensions')
-    max_size = config.get_config('file.index.max_size')
-    days_range = config.get_config('file.index.date_range_days')
-    cutoff_date = datetime.now() - timedelta(days=days_range)
     
     for root, _, files in os.walk(path):
         for file in files:
             file_path = os.path.join(root, file)
-            if not os.path.isfile(file_path):
+            if not os.path.isfile(file_path) and not os.path.islink(file_path):
                 continue
                 
             # Check file extension
             _, ext = os.path.splitext(file_path)
             if allowed_extensions and ext.lower() not in allowed_extensions:
                 continue
-                
-            # Check file size
-            if max_size and os.path.getsize(file_path) > max_size:
-                continue
-                
-            # Check file date
-            mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
-            if mtime < cutoff_date:
-                continue
             
-            checksum = db.insert_file(file_path)
-            click.echo(f"Indexed: {file_path} (Checksum: {checksum})")
+            # Calculate checksum without inserting into file table
+            checksum = db.get_file_checksum(file_path)
+            
+            # Add incarnation record
+            abs_path = db.insert_file_incarnation(file_path, checksum)
+            
+            # Show different message based on whether file is in database
+            if db.file_exists(checksum):
+                click.echo(f"Found incarnation: {abs_path} (Checksum: {checksum})")
+            else:
+                click.echo(f"New file found: {abs_path} (Checksum: {checksum}). Use 'filing checkin' to add it to the cabinet.")
     
     db.close()
 
@@ -176,35 +174,47 @@ def checkin(file_path):
     db.close()
 
 @cli.command()
-@click.argument('file_path', type=click.Path(exists=True))
-def info(file_path):
-    """Get information about a file."""
+@click.argument('path', type=click.Path(exists=True))
+def file_info(path):
+    """Show detailed information about a file and all its incarnations."""
     db = FilingCabinetDB(DB_PATH)
     db.connect()
-
-    file_info, incarnations = db.get_file_info(file_path)
-
-    if file_info:
-        click.echo("File Information:")
-        click.echo(f"Checksum: {file_info[0]}")
-        click.echo(f"URL: {file_info[1]}")
-        click.echo(f"Filed: {file_info[2]}")
-        click.echo(f"Last Updated: {file_info[3]}")
-        click.echo(f"Name: {file_info[4]}")
-        click.echo(f"Size: {file_info[5]} bytes")
-
-        if incarnations:
-            click.echo("\nIncarnations:")
-            for inc in incarnations:
-                click.echo(f"  URL: {inc[2]}")
-                click.echo(f"  Type: {inc[3]}")
-                click.echo(f"  Forward URL: {inc[4]}")
-                click.echo(f"  Status: {inc[5]}")
-                click.echo(f"  Last Checked: {inc[6]}")
-                click.echo("")
-    else:
-        click.echo("File not found in the filing cabinet.")
-
+    
+    # First get file info
+    result = db.get_file_info(path)
+    if not result or not result[0]:
+        click.echo(f"File not found in database: {path}")
+        db.close()
+        return
+    
+    file_info, incarnations = result
+    checksum = file_info[0]  # First element is checksum
+    
+    click.echo(f"\nFile Information:")
+    click.echo(f"Checksum: {checksum}")
+    click.echo(f"URL: {file_info[1]}")
+    click.echo(f"Filed: {file_info[2]}")
+    click.echo(f"Last Updated: {file_info[3]}")
+    click.echo(f"Name: {file_info[4]}")
+    click.echo(f"Size: {file_info[5]} bytes")
+    
+    # Get all incarnations
+    if not incarnations:
+        click.echo("\nNo incarnations found.")
+        db.close()
+        return
+    
+    click.echo("\nIncarnations:")
+    for inc in incarnations:
+        click.echo("\n  Location:")
+        click.echo(f"    Path: {inc[0]}")  # incarnation_url
+        click.echo(f"    Device: {inc[1]}")  # incarnation_device
+        click.echo("  Details:")
+        click.echo(f"    Type: {inc[3]}")  # incarnation_type
+        if inc[4]:  # forward_url for symlinks
+            click.echo(f"    Forward URL: {inc[4]}")
+        click.echo(f"    Last Updated: {inc[5]}")  # last_update_time_stamp
+    
     db.close()
 
 @cli.command()
