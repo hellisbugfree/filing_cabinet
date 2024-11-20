@@ -6,6 +6,11 @@ setup(
     packages=find_packages(),
     install_requires=[
         "click",
+        "Pillow",
+        "pytesseract",
+        "PyPDF2",
+        "pdf2image",
+        "python-magic",
     ],
     entry_points={
         "console_scripts": [

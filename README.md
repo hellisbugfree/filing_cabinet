@@ -2,6 +2,9 @@
 
 A command-line file management system for organizing and tracking files across your system.
 
+## todo
+
+
 ## Features
 
 - File check-in and check-out with checksum verification

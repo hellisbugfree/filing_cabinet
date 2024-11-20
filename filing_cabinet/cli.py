@@ -3,19 +3,22 @@ import os
 import hashlib
 from datetime import datetime, timedelta
 from .services.file_service import FileService
+from .services.file_processor_service import FileProcessorService
 from .config import ConfigService, ConfigurationError
 
 DB_PATH = os.path.expanduser('~/filing.cabinet')
 file_service = None
 config_service = None
+file_processor_service = None
 
 def init_services():
     """Initialize services."""
-    global file_service, config_service
-    if file_service is None or config_service is None:
+    global file_service, config_service, file_processor_service
+    if file_service is None or config_service is None or file_processor_service is None:
         config_service = ConfigService(DB_PATH)
         file_service = FileService(DB_PATH)
-    return file_service, config_service
+        file_processor_service = FileProcessorService(DB_PATH)
+    return file_service, config_service, file_processor_service
 
 @click.group()
 def cli():
@@ -33,7 +36,7 @@ def config():
 def config_get(key, default):
     """Get a configuration value."""
     try:
-        _, config = init_services()
+        _, config, _ = init_services()
         value = config.get(key, default)
         click.echo(f"{key}: {value}")
     except ConfigurationError as e:
@@ -46,7 +49,7 @@ def config_get(key, default):
 def config_set(key, value):
     """Set a configuration value."""
     try:
-        _, config = init_services()
+        _, config, _ = init_services()
         config.set(key, value)
         click.echo(f"Set {key} to {value}")
     except ConfigurationError as e:
@@ -61,7 +64,7 @@ def config_set(key, value):
 def config_create(key, value, default, description):
     """Create a new configuration entry."""
     try:
-        _, config = init_services()
+        _, config, _ = init_services()
         config.create(key, value, default, description or '')
         click.echo(f"Created {key} with value {value}")
     except ConfigurationError as e:
@@ -72,7 +75,7 @@ def config_create(key, value, default, description):
 def config_list():
     """List all configuration values."""
     try:
-        _, config = init_services()
+        _, config, _ = init_services()
         config_dict = config.list_all()
         
         # Group by prefix
@@ -104,7 +107,7 @@ def config_list():
 def config_reset(key):
     """Reset configuration value to default."""
     try:
-        _, config = init_services()
+        _, config, _ = init_services()
         config.reset(key)
         click.echo(f"Reset {key} to default value")
     except ConfigurationError as e:
@@ -116,7 +119,7 @@ def config_reset(key):
 def config_export(file_path):
     """Export configuration to a file."""
     try:
-        _, config = init_services()
+        _, config, _ = init_services()
         config.export_to_file(file_path)
         click.echo(f"Configuration exported to {file_path}")
     except ConfigurationError as e:
@@ -128,7 +131,7 @@ def config_export(file_path):
 def config_import(file_path):
     """Import configuration from a file."""
     try:
-        _, config = init_services()
+        _, config, _ = init_services()
         config.import_from_file(file_path)
         click.echo(f"Configuration imported from {file_path}")
     except ConfigurationError as e:
@@ -138,7 +141,7 @@ def config_import(file_path):
 @cli.command()
 def status():
     """Show database status."""
-    service, config = init_services()
+    service, _, _ = init_services()
     stats = service.get_statistics()
     
     click.echo("Filing Cabinet Status:")
@@ -151,7 +154,7 @@ def status():
 @click.argument('path', type=click.Path(exists=True), default=os.path.expanduser('~'))
 def index(path):
     """Index files in the given path."""
-    service, _ = init_services()
+    service, _, _ = init_services()
     new_paths = service.index_files(path)
     
     if not new_paths:
@@ -164,7 +167,7 @@ def index(path):
 @click.argument('file_path', type=click.Path(exists=True))
 def checkin(file_path):
     """Check in a file to the filing cabinet."""
-    service, _ = init_services()
+    service, _, _ = init_services()
     try:
         checksum = service.checkin_file(file_path)
         click.echo(f"File checked in: {file_path} (Checksum: {checksum})")
@@ -176,7 +179,7 @@ def checkin(file_path):
 @click.argument('path', type=click.Path(exists=True))
 def file_info(path):
     """Show detailed information about a file and all its incarnations."""
-    service, _ = init_services()
+    service, _, _ = init_services()
     file, incarnations = service.get_file_info(path)
     
     if not file:
@@ -205,13 +208,31 @@ def file_info(path):
 @click.argument('output_path', type=click.Path())
 def checkout(checksum, output_path):
     """Check out a file from the filing cabinet."""
-    service, _ = init_services()
+    service, _, _ = init_services()
     result = service.checkout_file(checksum, output_path)
     
     if result:
         click.echo(f"File checked out to: {result}")
     else:
         click.echo(f"File not found with checksum: {checksum}", err=True)
+
+@cli.command()
+@click.argument('file_path', type=click.Path(exists=True))
+def process_file(file_path):
+    """Process a file to extract metadata and OCR content.
+    
+    Supports PDF files and common image formats (JPEG, PNG, TIFF).
+    Extracts metadata and performs OCR, saving results to a .filing_meta_data file.
+    """
+    _, _, processor = init_services()
+    metadata = processor.process_file(file_path)
+    
+    if metadata and processor.save_metadata(file_path, metadata):
+        click.echo(f"Successfully processed {file_path}")
+        click.echo(f"Metadata saved to {file_path}.filing_meta_data")
+    else:
+        click.echo(f"Failed to process {file_path}", err=True)
+        exit(1)
 
 if __name__ == '__main__':
     cli()
