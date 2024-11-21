@@ -1,155 +1,164 @@
 # Filing Cabinet
 
-A command-line file management system for organizing and tracking files across your system.
-
-## todo
-
+A document processing and filing system with advanced OCR capabilities, designed to extract and organize structured data from various document types.
 
 ## Features
 
-- File check-in and check-out with checksum verification
-- Track multiple incarnations (copies) of the same file
-- Automatic file indexing with configurable extensions
-- Flexible configuration management with import/export capabilities
-- SQLite-based storage for file metadata and configuration
+- **Advanced OCR Processing**
+  - Intelligent text extraction from both scanned and digital PDFs
+  - Table detection and structured data extraction
+  - Multi-language support with automatic language detection
+  - Metadata extraction from various file types
 
-## Project Structure
+- **File Management**
+  - File check-in and check-out with checksum verification
+  - Track multiple incarnations (copies) of the same file
+  - Automatic file indexing with configurable extensions
 
-```
-filing_cabinet/
-├── models/           # Domain models
-│   ├── file.py      # File entity and operations
-│   └── incarnation.py # File incarnation tracking
-├── repositories/     # Data access layer
-│   ├── base.py      # Generic repository interface
-│   ├── file_repository.py
-│   └── incarnation_repository.py
-├── services/        # Business logic layer
-│   └── file_service.py
-├── config/         # Configuration management
-│   ├── configuration.py
-│   └── config_service.py
-└── cli.py         # Command-line interface
-```
+- **Document Analysis**
+  - Automatic entity extraction (dates, amounts, etc.)
+  - Key-value pair detection
+  - Table structure preservation
+  - PDF metadata extraction
 
 ## Installation
 
+1. Clone the repository:
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/filing_cabinet.git
-cd filing_cabinet
+git clone https://github.com/hellisbugfree/filing-cabinet.git
+cd filing-cabinet
+```
 
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+2. Create and activate a virtual environment:
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
 
-# Install the package
+3. Install the package in development mode:
+```bash
 pip install -e .
+```
+
+## System Requirements
+
+- Python 3.9 or higher
+- Tesseract OCR (with language support as needed)
+- Poppler (for PDF processing)
+
+On macOS, install system dependencies with:
+```bash
+brew install tesseract
+brew install poppler
 ```
 
 ## Usage
 
-### Basic Commands
-
+Process a file with OCR and metadata extraction:
 ```bash
-# Show filing cabinet status
-filing status
-
-# Index files in a directory
-filing index [PATH]
-
-# Check in a file
-filing checkin FILE_PATH
-
-# Get file information
-filing file-info FILE_PATH
-
-# Check out a file
-filing checkout CHECKSUM OUTPUT_PATH
+filing process-file path/to/document.pdf
 ```
 
-### Configuration Management
-
-```bash
-# List all configuration
-filing config list
-
-# Get a configuration value
-filing config get KEY
-
-# Set a configuration value
-filing config set KEY VALUE
-
-# Export configuration
-filing config export CONFIG_FILE
-
-# Import configuration
-filing config import CONFIG_FILE
-
-# Reset configuration to default
-filing config reset KEY
-```
-
-## Configuration Options
-
-Default configuration values:
-
-```python
+The processed file will generate a metadata file (`document.pdf.filing_meta_data`) containing:
+```json
 {
-    'cabinet.name': 'Filing Cabinet',
-    'database.schema.version': '1.0.0',
-    'file.index.extensions': ['.txt', '.pdf', '.doc', '.docx'],
-    'file.checkin.max_size': 100 * 1024 * 1024,  # 100MB
-    'storage.compression': 'none',
-    'storage.encryption': 'none',
-    'indexing.recursive': True,
-    'indexing.follow_symlinks': False,
-    'indexing.ignore_patterns': ['.git/*', '*.pyc', '__pycache__/*']
+    "filing_cabinet": {
+        "checksum": "sha256_hash",
+        "processed_at": "ISO-8601 timestamp",
+        "version": "0.3.1"
+    },
+    "device_data": {
+        "created_at": "ISO-8601 timestamp",
+        "modified_at": "ISO-8601 timestamp",
+        "accessed_at": "ISO-8601 timestamp",
+        "permissions": "unix-style permissions",
+        "device_info": {
+            "hostname": "device hostname",
+            "platform": "Darwin/Linux/Windows",
+            "platform_version": "OS version",
+            "platform_machine": "architecture",
+            "device_id": "unique device identifier"
+        }
+    },
+    "content": {
+        "text": "extracted text content",
+        "tables": ["detected tables"],
+        "key_value_pairs": {
+            "key1": "value1",
+            "key2": "value2"
+        },
+        "entities": {
+            "dates": ["detected dates"],
+            "amounts": ["detected amounts"]
+        }
+    }
 }
 ```
 
-## Recent Improvements
+## Development
 
-- ✅ Complete codebase refactoring for better modularity
-- ✅ Implemented proper domain models and repositories
-- ✅ Added comprehensive configuration management system
-- ✅ Improved error handling and type safety
-- ✅ Enhanced database schema management
-- ✅ deployment script to git for deployment
-- ✅ Fixed: Duplicate incarnation handling during indexing
-   - Issue: SQLite unique constraint error when indexing same directory multiple times
-   - Fix: Added update logic for existing incarnations instead of insert-only
+### Project Structure
+```
+filing-cabinet/
+├── filing_cabinet/          # Main package directory
+│   ├── services/           # Core services
+│   │   └── file_processor_service.py
+│   ├── models/            # Data models
+│   ├── repositories/      # Database interactions
+│   ├── config/           # Configuration
+│   ├── utils/            # Helpers
+│   └── cli/             # CLI interface
+├── tests/                # Test files
+│   └── fixtures/        # Test documents
+├── pyproject.toml        # Project configuration
+└── deploy.sh            # Deployment script
+```
 
+### Version Control
+
+The project uses semantic versioning (MAJOR.MINOR.PATCH):
+- MAJOR: Incompatible API changes
+- MINOR: New features (backwards compatible)
+- PATCH: Bug fixes (backwards compatible)
+
+Current version: 0.3.1
+
+Version is managed in `pyproject.toml` and synchronized with git tags using `deploy.sh`.
+
+### Release Process
+
+To create a new release:
+```bash
+./deploy.sh
+```
+
+This will:
+1. Update version in pyproject.toml
+2. Create a git tag
+3. Push changes and tags to remote
 
 ## Recent Changes
-- Added comprehensive logging system
-- Created initial test suite for FileService and ConfigService
-- Added development tools and testing dependencies
-- Improved error handling across services
 
-## Testing Backlog/Errors
-1. make logging persistent in the database with 
-- database.log.maximum_entries = default: 10000
-- database.log.retention.storage_path = default: /var/log/filing_cabinet
-2. Known Issues:
-   - [ ] Need to handle symlinks properly during indexing
-   - [ ] Add proper error handling for file permission issues
-   - [ ] Add validation for configuration values
-   - [ ] Improve error messages for database connection issues
-
-## Planned Features
-
-- [ ] Compression and encryption support
-- [ ] Advanced OCR processing and metadata extraction
-- [ ] File version control
-- [ ] Enhanced symlink detection and handling
-- [ ] Comprehensive test suite
-- [ ] Performance optimization for large file indexing
+- Improved metadata extraction with device information
+- Added version tracking in metadata output
+- Reorganized project structure for better maintainability
+- Enhanced documentation and examples
+- Cleaned up redundant files and directories
+- Centralized version management in pyproject.toml
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests: `pytest`
+5. Submit a pull request
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+[MIT License](LICENSE)
+
+## Contact
+
+- Author: hellisbugfree
+- Email: fyi_public@protonmail.com

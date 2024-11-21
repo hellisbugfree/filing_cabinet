@@ -3,7 +3,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
-ocr_test_files
 .Python
 build/
 develop-eggs/
@@ -24,6 +23,7 @@ wheels/
 # Virtual Environment
 venv/
 ENV/
+env/
 
 # IDE
 .idea/
@@ -41,5 +41,10 @@ ehthumbs.db
 Thumbs.db
 
 # Project specific
-*.cabinet
-deploy.sh
+*.filing_meta_data
+filing.db
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
