@@ -1,131 +1,111 @@
+"""File repository for the filing cabinet."""
 import sqlite3
-from typing import Optional, List, Any
-from datetime import datetime
+from typing import Optional, List, Dict, Any
 from ..models.file import File
 from .base import BaseRepository
 
-class FileRepository(BaseRepository[File]):
-    """Repository for managing File entities in the database."""
+class FileRepository(BaseRepository):
+    """Repository for managing files in the database."""
 
     def __init__(self, db_path: str):
-        self.db_path = db_path
-        self.conn = None
-        self.cursor = None
+        """Initialize the repository with database path."""
+        super().__init__(db_path)
+        self.connect()  # Connect immediately
+        self.create_table()
 
-    def connect(self) -> None:
-        """Establish database connection."""
-        self.conn = sqlite3.connect(self.db_path)
-        self.cursor = self.conn.cursor()
-        self._create_table()
+    def __del__(self):
+        """Cleanup database connection."""
+        self.close()
 
-    def close(self) -> None:
-        """Close database connection."""
-        if self.conn:
-            self.conn.close()
+    def create_table(self) -> None:
+        """Create the files table if it doesn't exist."""
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS file (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                checksum TEXT NOT NULL,
+                name TEXT NOT NULL,
+                size INTEGER NOT NULL,
+                path TEXT NOT NULL,
+                mime_type TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(checksum, path)
+            )
+        """)
 
-    def _create_table(self) -> None:
-        """Create the file table if it doesn't exist."""
-        self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS file (
-            checksum TEXT PRIMARY KEY,
-            url TEXT,
-            filed_time_stamp DATETIME,
-            last_update_time_stamp DATETIME,
-            name TEXT,
-            size INTEGER,
-            content BLOB
+    def save(self, file: File) -> None:
+        """Save a file to the database."""
+        self.execute(
+            """
+            INSERT OR REPLACE INTO file (
+                checksum, name, size, path, mime_type
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (file.checksum, file.name, file.size, file.path, file.mime_type)
         )
-        ''')
-        self.conn.commit()
 
-    def get(self, checksum: str) -> Optional[File]:
-        """Retrieve a file by its checksum."""
-        self.cursor.execute(
-            'SELECT checksum, url, filed_time_stamp, last_update_time_stamp, name, size, content '
-            'FROM file WHERE checksum = ?',
+    def get_by_id(self, file_id: str) -> Optional[File]:
+        """Get a file by its ID."""
+        row = self.fetch_one(
+            "SELECT * FROM file WHERE id = ?",
+            (file_id,)
+        )
+        if row:
+            file = File(row['path'])
+            return file
+        return None
+
+    def get_by_checksum(self, checksum: str) -> Optional[File]:
+        """Get a file by its checksum."""
+        row = self.fetch_one(
+            "SELECT * FROM file WHERE checksum = ?",
             (checksum,)
         )
-        row = self.cursor.fetchone()
-        if not row:
-            return None
+        if row:
+            file = File(row['path'])
+            return file
+        return None
 
-        return File(
-            checksum=row[0],
-            url=row[1],
-            filed_timestamp=datetime.fromisoformat(row[2]) if row[2] else None,
-            last_update_timestamp=datetime.fromisoformat(row[3]) if row[3] else None,
-            name=row[4],
-            size=row[5],
-            content=row[6]
+    def index_file(self, file_path: str) -> None:
+        """Index a file's basic information."""
+        file = File(file_path)
+        self.execute(
+            """
+            INSERT OR REPLACE INTO file (
+                checksum, name, size, path, mime_type
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (file.checksum, file.name, file.size, file.path, file.mime_type)
         )
 
-    def add(self, file: File) -> None:
-        """Add a new file to the repository."""
-        self.cursor.execute('''
-        INSERT INTO file (checksum, url, filed_time_stamp, last_update_time_stamp, name, size, content)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            file.checksum,
-            file.url,
-            file.filed_timestamp.isoformat() if file.filed_timestamp else None,
-            file.last_update_timestamp.isoformat() if file.last_update_timestamp else None,
-            file.name,
-            file.size,
-            file.content
-        ))
-        self.conn.commit()
+    def delete(self, file_id: str) -> bool:
+        """Delete a file by its ID."""
+        self.execute(
+            "DELETE FROM file WHERE id = ?",
+            (file_id,)
+        )
+        return True
 
-    def update(self, file: File) -> None:
-        """Update an existing file."""
-        file.update_timestamp()
-        self.cursor.execute('''
-        UPDATE file
-        SET url = ?, last_update_time_stamp = ?, name = ?, size = ?, content = ?
-        WHERE checksum = ?
-        ''', (
-            file.url,
-            file.last_update_timestamp.isoformat(),
-            file.name,
-            file.size,
-            file.content,
-            file.checksum
-        ))
-        self.conn.commit()
+    def search(self, query: str) -> List[File]:
+        """Search for files by name or path."""
+        rows = self.fetch_all(
+            """
+            SELECT * FROM file 
+            WHERE name LIKE ? OR path LIKE ?
+            ORDER BY created_at DESC
+            """,
+            (f"%{query}%", f"%{query}%")
+        )
+        return [File(row['path']) for row in rows]
 
-    def delete(self, checksum: str) -> None:
-        """Delete a file by its checksum."""
-        self.cursor.execute('DELETE FROM file WHERE checksum = ?', (checksum,))
-        self.conn.commit()
-
-    def list(self, **filters: Any) -> List[File]:
-        """List all files matching the given filters."""
-        query = 'SELECT checksum, url, filed_time_stamp, last_update_time_stamp, name, size, content FROM file'
-        params = []
-        
-        if filters:
-            conditions = []
-            for key, value in filters.items():
-                conditions.append(f'{key} = ?')
-                params.append(value)
-            query += ' WHERE ' + ' AND '.join(conditions)
-
-        self.cursor.execute(query, params)
-        rows = self.cursor.fetchall()
-
-        return [
-            File(
-                checksum=row[0],
-                url=row[1],
-                filed_timestamp=datetime.fromisoformat(row[2]) if row[2] else None,
-                last_update_timestamp=datetime.fromisoformat(row[3]) if row[3] else None,
-                name=row[4],
-                size=row[5],
-                content=row[6]
-            )
-            for row in rows
-        ]
-
-    def get_file_count(self) -> int:
-        """Get the total number of files in the repository."""
-        self.cursor.execute('SELECT COUNT(*) FROM file')
-        return self.cursor.fetchone()[0]
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get statistics about the files."""
+        stats = self.fetch_one("""
+            SELECT 
+                COUNT(*) as total_files,
+                COALESCE(SUM(size), 0) as total_size
+            FROM file
+        """)
+        return {
+            "total_files": stats['total_files'],
+            "total_size": stats['total_size']
+        }

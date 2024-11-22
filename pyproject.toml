@@ -1,6 +1,6 @@
 [project]
 name = "filing-cabinet"
-version = "0.3.3"
+version = "0.3.31"
 description = "A document processing and filing system with OCR capabilities"
 authors = [
     {name = "hellisbugfree", email = "fyi_public@protonmail.com"}
@@ -19,6 +19,9 @@ dependencies = [
     "pathlib>=1.0.1",
     "python-dotenv>=1.0.0",
 ]
+
+[project.scripts]
+filing = "filing_cabinet.cli:cli"
 
 [project.optional-dependencies]
 dev = [

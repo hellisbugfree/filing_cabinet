@@ -1,164 +1,167 @@
 # Filing Cabinet
 
-A document processing and filing system with advanced OCR capabilities, designed to extract and organize structured data from various document types.
+A command-line tool for managing and organizing your files with advanced processing capabilities.
+
+## TODO
+V
+- 
 
 ## Features
 
-- **Advanced OCR Processing**
-  - Intelligent text extraction from both scanned and digital PDFs
-  - Table detection and structured data extraction
-  - Multi-language support with automatic language detection
-  - Metadata extraction from various file types
-
-- **File Management**
-  - File check-in and check-out with checksum verification
-  - Track multiple incarnations (copies) of the same file
-  - Automatic file indexing with configurable extensions
-
-- **Document Analysis**
-  - Automatic entity extraction (dates, amounts, etc.)
-  - Key-value pair detection
-  - Table structure preservation
-  - PDF metadata extraction
+- File indexing and organization
+- Metadata extraction and content analysis
+- Configurable file processing rules
+- Search functionality
+- AI-powered file analysis (coming soon)
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/hellisbugfree/filing-cabinet.git
-cd filing-cabinet
+git clone https://github.com/yourusername/filing_cabinet.git
+cd filing_cabinet
 ```
 
 2. Create and activate a virtual environment:
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
-3. Install the package in development mode:
+3. Install dependencies:
 ```bash
-pip install -e .
+pip install -r requirements.txt
 ```
 
-## System Requirements
+## Command Reference
 
-- Python 3.9 or higher
-- Tesseract OCR (with language support as needed)
-- Poppler (for PDF processing)
+### File Management
 
-On macOS, install system dependencies with:
-```bash
-brew install tesseract
-brew install poppler
-```
+- `filing add <path>` - Add a file or directory to the cabinet
+  - Processes and stores file metadata
+  - Supports both single files and directories
+  - Automatically skips ignored files (e.g., .git, __pycache__)
 
-## Usage
+- `filing index <path>` - Index files in a directory
+  - Scans directory for files without processing content
+  - Creates a searchable index of file locations
+  - Default path is user's home directory if not specified
 
-Process a file with OCR and metadata extraction:
-```bash
-filing process-file path/to/document.pdf
-```
+- `filing process <path>` - Process a file to extract metadata and content
+  - Extracts detailed metadata
+  - Analyzes file content based on type
+  - Stores extracted information for searching
 
-The processed file will generate a metadata file (`document.pdf.filing_meta_data`) containing:
-```json
-{
-    "filing_cabinet": {
-        "checksum": "sha256_hash",
-        "processed_at": "ISO-8601 timestamp",
-        "version": "0.3.1"
-    },
-    "device_data": {
-        "created_at": "ISO-8601 timestamp",
-        "modified_at": "ISO-8601 timestamp",
-        "accessed_at": "ISO-8601 timestamp",
-        "permissions": "unix-style permissions",
-        "device_info": {
-            "hostname": "device hostname",
-            "platform": "Darwin/Linux/Windows",
-            "platform_version": "OS version",
-            "platform_machine": "architecture",
-            "device_id": "unique device identifier"
-        }
-    },
-    "content": {
-        "text": "extracted text content",
-        "tables": ["detected tables"],
-        "key_value_pairs": {
-            "key1": "value1",
-            "key2": "value2"
-        },
-        "entities": {
-            "dates": ["detected dates"],
-            "amounts": ["detected amounts"]
-        }
-    }
-}
-```
+- `filing export <checksum> [output_path]` - Export a file from the cabinet
+  - Retrieves file by its checksum
+  - Optionally specify output location
+  - Preserves original file metadata
+
+- `filing analyze <path>` - Analyze a file using AI
+  - Extracts insights and summaries (requires OpenAI key)
+  - Identifies topics and themes
+  - Generates metadata suggestions
+
+- `filing search <query>` - Search for files
+  - Searches by filename, path, or content
+  - Shows detailed file information
+  - Orders results by relevance
+
+- `filing info <file_id>` - Show detailed file information
+  - Displays all metadata
+  - Shows processing history
+  - Lists extracted content info
+
+- `filing remove <file_id>` - Remove a file from the cabinet
+  - Removes file entry and metadata
+  - Requires confirmation
+  - Original file remains unchanged
+
+- `filing status` - Show cabinet statistics
+  - Total files and size
+  - Processing statistics
+  - Database location
+
+### Configuration Management
+
+- `filing config list` - List all configuration values
+  - Shows current settings
+  - Displays default values
+  - Includes setting descriptions
+
+- `filing config get <key>` - Get a configuration value
+  - Retrieves specific setting
+  - Shows current and default value
+  - Supports optional default value
+
+- `filing config set <key> <value>` - Set a configuration value
+  - Updates setting
+  - Validates value format
+  - Preserves default value
+
+- `filing config create <key> <value>` - Create a new configuration entry
+  - Adds new setting
+  - Supports default value
+  - Allows description
+
+- `filing config reset <key>` - Reset value to default
+  - Restores default value
+  - Preserves setting definition
+  - Keeps description
+
+- `filing config export <file_path>` - Export configuration
+  - Saves all settings to file
+  - Includes defaults and descriptions
+  - Portable format
+
+- `filing config import <file_path>` - Import configuration
+  - Loads settings from file
+  - Validates all values
+  - Preserves existing settings not in file
+
+- `filing config set-openai-key <api_key>` - Set OpenAI API key
+  - Securely stores API key
+  - Validates key format
+  - Required for AI features
 
 ## Development
 
 ### Project Structure
+
 ```
-filing-cabinet/
-├── filing_cabinet/          # Main package directory
-│   ├── services/           # Core services
-│   │   └── file_processor_service.py
-│   ├── models/            # Data models
-│   ├── repositories/      # Database interactions
-│   ├── config/           # Configuration
-│   ├── utils/            # Helpers
-│   └── cli/             # CLI interface
-├── tests/                # Test files
-│   └── fixtures/        # Test documents
-├── pyproject.toml        # Project configuration
-└── deploy.sh            # Deployment script
-```
-
-### Version Control
-
-The project uses semantic versioning (MAJOR.MINOR.PATCH):
-- MAJOR: Incompatible API changes
-- MINOR: New features (backwards compatible)
-- PATCH: Bug fixes (backwards compatible)
-
-Current version: 0.3.1
-
-Version is managed in `pyproject.toml` and synchronized with git tags using `deploy.sh`.
-
-### Release Process
-
-To create a new release:
-```bash
-./deploy.sh
+filing_cabinet/
+├── filing_cabinet/
+│   ├── __init__.py
+│   ├── cli.py              # Command-line interface
+│   ├── cli_utils.py        # CLI utilities
+│   ├── config.py           # Configuration management
+│   ├── errors.py           # Custom exceptions
+│   ├── models/             # Data models
+│   ├── repositories/       # Database interactions
+│   ├── services/          # Business logic
+│   └── utils/             # Utility functions
+├── tests/                 # Test suite
+├── requirements.txt       # Dependencies
+└── README.md             # Documentation
 ```
 
-This will:
-1. Update version in pyproject.toml
-2. Create a git tag
-3. Push changes and tags to remote
+### Dependencies
 
-## Recent Changes
+Core dependencies:
+- `click` - Command-line interface
+- `python-magic` - File type detection
 
-- Improved metadata extraction with device information
-- Added version tracking in metadata output
-- Reorganized project structure for better maintainability
-- Enhanced documentation and examples
-- Cleaned up redundant files and directories
-- Centralized version management in pyproject.toml
+Optional dependencies for AI features:
+- `openai` - AI-powered analysis
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Run tests: `pytest`
-5. Submit a pull request
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 
-[MIT License](LICENSE)
-
-## Contact
-
-- Author: hellisbugfree
-- Email: fyi_public@protonmail.com
+This project is licensed under the MIT License - see the LICENSE file for details.

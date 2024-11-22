@@ -20,18 +20,7 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environment
-venv/
-ENV/
-env/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS
+# OS generated files
 .DS_Store
 .DS_Store?
 ._*
@@ -39,6 +28,17 @@ env/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
 
 # Project specific
 *.filing_meta_data

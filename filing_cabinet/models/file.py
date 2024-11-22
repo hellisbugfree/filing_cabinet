@@ -1,47 +1,38 @@
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Optional
-import hashlib
+"""File model for the filing cabinet."""
 import os
+import hashlib
+from typing import Dict, Any
 
-@dataclass
 class File:
-    """Represents a file in the filing cabinet system."""
-    checksum: str
-    name: str
-    size: int
-    content: bytes
-    url: Optional[str] = None
-    filed_timestamp: Optional[datetime] = None
-    last_update_timestamp: Optional[datetime] = None
+    """Represents a file in the filing cabinet."""
 
-    @classmethod
-    def from_path(cls, file_path: str) -> 'File':
-        """Create a File instance from a file path."""
-        with open(file_path, 'rb') as f:
-            content = f.read()
-            return cls(
-                checksum=hashlib.md5(content).hexdigest(),
-                name=os.path.basename(file_path),
-                size=os.path.getsize(file_path),
-                content=content,
-                url=file_path,
-                filed_timestamp=datetime.now(),
-                last_update_timestamp=datetime.now()
-            )
+    def __init__(self, file_path: str):
+        """Initialize a file from a path."""
+        self.path = os.path.abspath(file_path)
+        self.name = os.path.basename(file_path)
+        self.size = os.path.getsize(file_path)
+        self.checksum = self._calculate_checksum()
+        self.mime_type = self._get_mime_type()
 
-    def save_to(self, output_path: str) -> str:
-        """Save the file content to the specified path."""
-        full_path = os.path.join(output_path, self.name)
-        with open(full_path, 'wb') as f:
-            f.write(self.content)
-        return full_path
+    def _calculate_checksum(self) -> str:
+        """Calculate SHA-256 checksum of the file."""
+        sha256_hash = hashlib.sha256()
+        with open(self.path, "rb") as f:
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(byte_block)
+        return sha256_hash.hexdigest()
 
-    def update_timestamp(self) -> None:
-        """Update the last update timestamp."""
-        self.last_update_timestamp = datetime.now()
+    def _get_mime_type(self) -> str:
+        """Get the MIME type of the file."""
+        import magic
+        return magic.from_file(self.path, mime=True)
 
-    @property
-    def is_filed(self) -> bool:
-        """Check if the file has been filed in the system."""
-        return self.filed_timestamp is not None
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert file to dictionary representation."""
+        return {
+            "path": self.path,
+            "name": self.name,
+            "size": self.size,
+            "checksum": self.checksum,
+            "mime_type": self.mime_type
+        }
