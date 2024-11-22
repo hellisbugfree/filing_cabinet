@@ -1,6 +1,6 @@
 [project]
 name = "filing-cabinet"
-version = "0.3.2"
+version = "0.3.3"
 description = "A document processing and filing system with OCR capabilities"
 authors = [
     {name = "hellisbugfree", email = "fyi_public@protonmail.com"}
